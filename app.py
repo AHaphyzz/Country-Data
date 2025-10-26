@@ -3,6 +3,7 @@ from sqlalchemy import String, Integer, Float, Column, text, create_engine, Date
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 import requests
+from os import environ
 import os
 import random
 from datetime import datetime, timezone
@@ -261,4 +262,5 @@ def delete_country(name):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
