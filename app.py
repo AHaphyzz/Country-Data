@@ -103,6 +103,7 @@ def fetch_countries():
                         "details": "Could not fetch data from Exchangerate API"}), 503
     rate_data = rate_resp.json()["rates"]
 
+    # Extract data  from APIs
     for item in country_data:
         if "currencies" in item and item["currencies"]:
             country_name = item.get("name", "Unknown")
@@ -110,8 +111,20 @@ def fetch_countries():
             region = item.get("region", "Unknown")
             popu = item.get("population", 0)
             flag = item.get("flag", "Unknown")
-
             currency = item["currencies"][0].get("code", None)
+
+            # Validate entries
+            if not country_name or not popu or not currency:
+                return jsonify({
+                    "error": "Validation failed",
+                    "details": {
+                        "name": "is required" if not country_name else None,
+                        "population": "is required" if not popu else None,
+                        "currency_code": "is required" if not currency else None
+                    }
+                }), 400
+
+            # Compute GDP
             if currency is None:
                 exch_rate = None
                 gdp = 0
@@ -123,8 +136,8 @@ def fetch_countries():
                     exch_rate = None
                     gdp = None
 
+            # Check for existing data
             existing_country = session.query(CountryData).filter(CountryData.name.ilike(country_name)).first()
-
             if existing_country:
                 existing_country.name = country_name
                 existing_country.capital = capital
@@ -135,6 +148,7 @@ def fetch_countries():
                 existing_country.exchange_rate = exch_rate
                 existing_country.estimated_gdp = gdp
 
+            # OR Add New data
             else:
                 new_country = CountryData(
                     name=country_name,
@@ -148,8 +162,8 @@ def fetch_countries():
                 )
                 session.add(new_country)
 
+            # Create or update timestamp
             existing_timestamp = session.query(Refresh).first()
-
             if existing_timestamp:
                 existing_timestamp.last_refreshed_at = datetime.now(timezone.utc)
 
@@ -159,6 +173,7 @@ def fetch_countries():
                 )
                 session.add(refresh_time)
 
+    # Commit Changes and Generate Image
     session.commit()
     generate_summary_image(session)
     return jsonify({"Successful": "Done"})
