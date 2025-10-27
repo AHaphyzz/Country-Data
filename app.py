@@ -99,7 +99,7 @@ def fetch_countries():
     country_data = response.json()
 
     rate_resp = requests.get("https://open.er-api.com/v6/latest/USD")
-    if response.status_code != 200:
+    if rate_resp.status_code != 200:
         return jsonify({"error": "External data source unavailable",
                         "details": "Could not fetch data from Exchangerate API"}), 503
     rate_data = rate_resp.json()["rates"]
@@ -115,15 +115,15 @@ def fetch_countries():
             currency = item["currencies"][0].get("code", None)
 
             # Validate entries
-            if not country_name or not popu or not currency:
-                return jsonify({
-                    "error": "Validation failed",
-                    "details": {
-                        "name": "is required" if not country_name else None,
-                        "population": "is required" if not popu else None,
-                        "currency_code": "is required" if not currency else None
-                    }
-                }), 400
+            # if not country_name or not popu or not currency:
+            #     return jsonify({
+            #         "error": "Validation failed",
+            #         "details": {
+            #             "name": "is required" if not country_name else None,
+            #             "population": "is required" if not popu else None,
+            #             "currency_code": "is required" if not currency else None
+            #         }
+            #     }), 400
 
             # Compute GDP
             if currency is None:
@@ -193,8 +193,19 @@ def filter_by():
     if currency:
         query = query.filter(func.lower(CountryData.currency_code) == currency.lower())
 
-    order = CountryData.estimated_gdp.desc() if gdp_sort else CountryData.estimated_gdp.asc()
-    query = query.order_by(order)
+    sortable_columns = {
+        "name": CountryData.name,
+        "population": CountryData.population,
+        "gdp": CountryData.estimated_gdp,
+        "region": CountryData.region,
+        "currency": CountryData.currency_code,
+    }
+
+    if gdp_sort in sortable_columns:
+        query = query.order_by(sortable_columns[gdp_sort].desc())
+    else:
+        # Default sort if no valid column provided
+        query = query.order_by(CountryData.estimated_gdp.desc())
 
     results = query.all()
 
@@ -238,7 +249,7 @@ def country_log():
     results = session.query(CountryData).count()
     last = session.query(Refresh).first()
 
-    return jsonify({"Total countries": results,
+    return jsonify({"Total_countries": results,
                     "last_refreshed_at": last.last_refreshed_at.isoformat()})
 
 
@@ -255,10 +266,14 @@ def get_summary_image():
 @app.route("/country/<string:name>", methods=["DELETE"])
 def delete_country(name):
     result = session.query(CountryData).filter(CountryData.name.ilike(name)).first()
-    session.delete(result)
+
     if not result:
-        return jsonify({"error": "Country not found"}), 404
-    return ""
+        return jsonify({"error": f"Country '{name}' not found"}), 404
+
+    session.delete(result)
+    session.commit()
+
+    return jsonify({"message": f"Country '{name}' deleted successfully"}), 200
 
 
 if __name__ == "__main__":
